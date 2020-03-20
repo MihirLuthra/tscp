@@ -1,0 +1,122 @@
+#! /usr/bin/env bash
+
+INPUT_DIR='/home/incoming'
+INPUT_FILE='tscp_input.csv'
+
+printf_err() {
+	ERR_COLOR='\033[0;31m'
+	NORMAL_COLOR='\033[0m'
+	printf "${ERR_COLOR}$1${NORMAL_COLOR}" ; shift
+	printf "${ERR_COLOR}%s${NORMAL_COLOR}\n" "$@" >&2
+}
+
+alias printf_err='printf_err "Line ${LINENO}: " '
+shopt -s expand_aliases
+
+usage() {
+
+	\printf_err \
+		"usage: ${BASH_SOURCE##*/} [ -i input_dir ]  [ -d days_before ]  [ -o ] [ -r ]" >&2
+
+	exit 1
+}
+
+fullpath() {
+    local path="$1" ; shift
+    local abs_path
+
+    if [ -z "${path}" ] ; then
+        printf_err "${BASH_SOURCE}: Line ${LINENO}: param1(path) is empty"
+        return 1
+    fi
+
+    abs_path="$( cd "$( dirname "${path}" )" ; pwd )/$( basename ${path} )"
+
+    printf "${abs_path}"
+}
+
+COPYSCRIPT="$( mktemp "/tmp/copyscriptXXXXX" )"
+
+while getopts 'd:i:of:' option
+do
+	case "${option}" in
+		d)
+			DAYS="${OPTARG}"
+			;;
+		f)
+			INPUT_FILE="${OPTARG}"
+			;;
+		i)
+			INPUT_DIR="${OPTARG}"
+			;;
+		o)
+			OVERWRITE=1
+			;;
+		*)
+			usage
+			;;
+	esac
+done
+
+if [ ! -d "${INPUT_DIR}" ] ; then
+	printf_err "No such directory ${INPUT_DIR}"
+	usage
+fi
+
+
+DAYS="${DAYS:-1}"
+MONTHS="${MONTHS:-0}"
+YEARS="${YEARS:-0}"
+
+if date -v -1d > /dev/null 2>&1; then
+	# BSD date
+
+	previous_date="$( date -v -${DAYS}d -v -${MONTHS}m -v -${YEARS}y '+%Y%m%d' )"
+
+else
+	# GNU date
+
+	previous_date="$( date --date="-${DAYS} days -${MONTHS} months -${YEARS} years" '+%Y%m%d' )"
+
+fi
+
+current_date="$( date '+%Y%m%d' )"
+
+tmpfile="$( mktemp "/tmp/tscp_data_XXXXX" )"
+
+while IFS=',' read -r src dst ; do
+	find $INPUT_DIR/$src* -exec bash -c "echo \"\$( basename {})\" \"$dst\" " \;  2> /dev/null >> $tmpfile
+done < "${INPUT_FILE}"
+
+awk -v input_dir="${INPUT_DIR}"\
+	-v previous_date="${previous_date}"\
+	-v todays_date="${current_date}" \
+	-v overwrite="${OVERWRITE}" \
+'{
+
+	pattern = "-"previous_date
+
+	if (match($0, pattern)) {
+
+		destination_dir = $2
+
+		gsub(/___TODAYS_DATE___/, todays_date, destination_dir)
+
+		print "mkdir -p " destination_dir
+
+		dst = destination_dir"/"$1
+
+		gsub(previous_date, todays_date, dst)
+
+		if (overwrite == "") {
+			print "cp -n "input_dir"/"$1, dst
+		} else {
+			print "cp "input_dir"/"$1, dst
+		}
+	}
+
+}' "${tmpfile}" > "${COPYSCRIPT}"
+
+bash "${COPYSCRIPT}"
+
+rm "${tmpfile}" "${COPYSCRIPT}"
