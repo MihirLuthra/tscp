@@ -124,8 +124,8 @@ awk -v input_dir="${INPUT_DIR}"\
 		print temp_commands
 	}
 
-}' "${tmpfile}" # > "${COPYSCRIPT}"
+}' "${tmpfile}"  > "${COPYSCRIPT}"
 
-#bash "${COPYSCRIPT}"
+bash "${COPYSCRIPT}"
 
 rm "${tmpfile}" "${COPYSCRIPT}"
