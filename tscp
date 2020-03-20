@@ -88,35 +88,44 @@ while IFS=',' read -r src dst ; do
 	find $INPUT_DIR/$src* -exec bash -c "echo \"\$( basename {})\" \"$dst\" " \;  2> /dev/null >> $tmpfile
 done < "${INPUT_FILE}"
 
+commands="$(echo "$(<"commands")" | tr '\n' ';')"
+
 awk -v input_dir="${INPUT_DIR}"\
 	-v previous_date="${previous_date}"\
 	-v todays_date="${current_date}" \
 	-v overwrite="${OVERWRITE}" \
+	-v commands="${commands}" \
 '{
 
 	pattern = "-"previous_date
 
 	if (match($0, pattern)) {
 
+		temp_commands = commands
+
 		destination_dir = $2
 
 		gsub(/___TODAYS_DATE___/, todays_date, destination_dir)
-
-		print "mkdir -p " destination_dir
 
 		dst = destination_dir"/"$1
 
 		gsub(previous_date, todays_date, dst)
 
 		if (overwrite == "") {
-			print "cp -n "input_dir"/"$1, dst
+			gsub(/___CP___/, "cp -n", temp_commands)
 		} else {
-			print "cp "input_dir"/"$1, dst
+			gsub(/___CP___/, "cp", temp_commands)
 		}
+
+		gsub(/___SRC_FILE___/, input_dir"/"$1, temp_commands)
+		gsub(/___DST_FILE___/, dst, temp_commands)
+		gsub(/___DST_DIR___/, destination_dir, temp_commands)
+		
+		print temp_commands
 	}
 
-}' "${tmpfile}" > "${COPYSCRIPT}"
+}' "${tmpfile}" # > "${COPYSCRIPT}"
 
-bash "${COPYSCRIPT}"
+#bash "${COPYSCRIPT}"
 
 rm "${tmpfile}" "${COPYSCRIPT}"

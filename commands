@@ -1,0 +1,3 @@
+mkdir -p ___DST_DIR___
+___CP___ ___SRC_FILE___ ___DST_FILE___
+chown ___DST_FILE___ student:student
